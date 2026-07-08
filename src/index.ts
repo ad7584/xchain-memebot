@@ -13,7 +13,7 @@ import { logger } from "./logger.js";
 import { createBot, BOT_COMMANDS } from "./bot/bot.js";
 import { startHttpServer } from "./server.js";
 import { startWorkers } from "./workers/index.js";
-import { installSignalHandlers, onShutdown } from "./shutdown.js";
+import { installSignalHandlers, onShutdown, isShuttingDown } from "./shutdown.js";
 import { pool } from "./db/index.js";
 import { closeRedis } from "./redis.js";
 
@@ -73,7 +73,22 @@ async function main() {
   } else {
     // Ensure no stale webhook is set when polling.
     await bot.api.deleteWebhook({ drop_pending_updates: false }).catch(() => {});
-    await bot.start({ onStart: (me) => logger.info(`@${me.username} live (polling)`) });
+    // Poll resiliently: a 409 (another instance briefly polling — e.g. the old
+    // container during a rolling redeploy) must NOT crash the process. Retry until
+    // we win the lock, so deploys are seamless instead of a crash-restart blip.
+    for (let attempt = 1; !isShuttingDown(); attempt++) {
+      try {
+        await bot.start({ onStart: (me) => logger.info(`@${me.username} live (polling)`) });
+        break; // clean shutdown
+      } catch (err) {
+        if ((err as { error_code?: number })?.error_code === 409) {
+          logger.warn({ attempt }, "getUpdates 409 conflict — another instance is polling; retrying in 5s");
+          await new Promise((r) => setTimeout(r, 5000));
+          continue;
+        }
+        throw err;
+      }
+    }
   }
 }
 
