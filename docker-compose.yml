@@ -1,0 +1,73 @@
+# Self-hosted production stack: bot + Postgres + Redis.
+#   cp .env.example .env   # fill in secrets (token, TURNKEY_*, ENCRYPTION_KEY, ...)
+#   docker compose up -d --build
+#
+# DATABASE_URL / REDIS_URL below point at the compose services and OVERRIDE
+# whatever is in .env (explicit `environment` wins over `env_file`).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: xchain_memebot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d xchain_memebot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/xchain_memebot
+      REDIS_URL: redis://redis:6379
+      PORT: 8080
+      # Workers run in-process here. To scale them out, set false and enable the
+      # `worker` service below.
+      RUN_WORKERS_IN_PROCESS: "true"
+    ports:
+      - "8080:8080" # expose only if using webhook mode / behind a reverse proxy
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Optional: run background jobs as a separate process. If you enable this,
+  # set RUN_WORKERS_IN_PROCESS=false on the `bot` service above.
+  # worker:
+  #   build: .
+  #   restart: unless-stopped
+  #   env_file: .env
+  #   environment:
+  #     NODE_ENV: production
+  #     DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/xchain_memebot
+  #     REDIS_URL: redis://redis:6379
+  #   command: ["sh", "-c", "node --enable-source-maps dist/worker.js"]
+  #   depends_on:
+  #     postgres: { condition: service_healthy }
+  #     redis: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  redisdata:

@@ -1,0 +1,43 @@
+{
+  "name": "xchain-memebot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Telegram bot to buy/sell Robinhood Chain memecoins funded from Solana (SOL) or Robinhood-Chain ETH. Mainnet.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node --enable-source-maps dist/index.js",
+    "worker": "tsx watch src/worker.ts",
+    "start:worker": "node --enable-source-maps dist/worker.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "preflight": "tsx src/scripts/preflight.ts",
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:init": "tsx src/scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@grammyjs/storage-redis": "^2.5.0",
+    "@solana/web3.js": "^1.98.0",
+    "@turnkey/sdk-server": "^1.7.0",
+    "@turnkey/solana": "^1.0.7",
+    "@turnkey/viem": "^0.6.6",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "grammy": "^1.30.0",
+    "ioredis": "^5.4.1",
+    "pg": "^8.13.1",
+    "pino": "^9.5.0",
+    "viem": "^2.21.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/pg": "^8.11.10",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

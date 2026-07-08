@@ -1,0 +1,36 @@
+/**
+ * AES-256-GCM encryption for secrets at rest (currently: user 2FA secrets).
+ * Key = ENCRYPTION_KEY (32-byte hex). In dev without a key we fall back to a
+ * clearly-marked `plain:` prefix so nothing silently looks encrypted.
+ */
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { config } from "../config.js";
+
+function key(): Buffer {
+  const b = Buffer.from(config.ENCRYPTION_KEY, "hex");
+  if (b.length !== 32) {
+    throw new Error("ENCRYPTION_KEY must be 32 bytes as hex (64 chars).");
+  }
+  return b;
+}
+
+export function encrypt(plaintext: string): string {
+  if (!config.ENCRYPTION_KEY) return `plain:${plaintext}`;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key(), iv);
+  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${Buffer.concat([iv, tag, ct]).toString("base64")}`;
+}
+
+export function decrypt(payload: string): string {
+  if (payload.startsWith("plain:")) return payload.slice(6);
+  if (!payload.startsWith("v1:")) throw new Error("Unrecognized ciphertext format.");
+  const raw = Buffer.from(payload.slice(3), "base64");
+  const iv = raw.subarray(0, 12);
+  const tag = raw.subarray(12, 28);
+  const ct = raw.subarray(28);
+  const d = createDecipheriv("aes-256-gcm", key(), iv);
+  d.setAuthTag(tag);
+  return Buffer.concat([d.update(ct), d.final()]).toString("utf8");
+}
