@@ -62,8 +62,15 @@ export async function relayQuote(p: RelayQuoteParams): Promise<RelayQuote> {
     tradeType: "EXACT_INPUT",
   };
   if (p.txs?.length) body.txs = p.txs;
-  if (p.appFeeBps && config.FEE_TREASURY_EVM) {
-    body.appFees = [{ recipient: config.FEE_TREASURY_EVM, fee: String(p.appFeeBps) }];
+  if (p.appFeeBps) {
+    // Relay pays the app fee in the ORIGIN currency, so the recipient must be on
+    // the origin chain: Solana address for SOL-origin (buys), EVM for RH-origin
+    // (sells). Skip the fee if the matching treasury isn't configured.
+    const recipient =
+      p.originChainId === RELAY_SOLANA_CHAIN_ID ? config.FEE_TREASURY_SOL : config.FEE_TREASURY_EVM;
+    if (recipient) {
+      body.appFees = [{ recipient, fee: String(p.appFeeBps) }];
+    }
   }
 
   const res = await fetch(`${BASE}/quote`, {

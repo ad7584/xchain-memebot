@@ -36,7 +36,10 @@ const schema = z.object({
   TURNKEY_API_PRIVATE_KEY: z.string().default(""),
 
   RELAY_API_BASE: z.string().url().default("https://api.relay.link"),
+  // Fee treasuries. Relay pays app fees in the ORIGIN currency/chain, so buys
+  // (Solana origin) pay to the Solana address and sells (RH origin) to the EVM one.
   FEE_TREASURY_EVM: z.string().default(""),
+  FEE_TREASURY_SOL: z.string().default(""),
   APP_FEE_BPS: z.coerce.number().int().min(0).max(2000).default(100),
 
   // Uniswap Trading API (swap calldata). Confirmed reachable for chain 4663 but
