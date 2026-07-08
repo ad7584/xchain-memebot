@@ -1,7 +1,7 @@
 /** Onboarding + balance aggregation for the bot UI. */
 import { getAddress, formatEther, formatUnits } from "viem";
 import { getUser, upsertUser, getPositions, type UserRow } from "../db/index.js";
-import { createUserWallets } from "../wallets/turnkey.js";
+import { provisionWallets } from "../wallets/custody.js";
 import { rhPublic } from "../chain/rhchain.js";
 import { erc20BalanceOf } from "../chain/erc20.js";
 import { ADDR } from "../chain/constants.js";
@@ -16,14 +16,16 @@ export async function getOrCreateUser(
   const existing = await getUser(telegramId);
   if (existing?.sol_pubkey && existing?.evm_eoa) return existing;
 
-  // First touch → create isolated Turnkey sub-org with SOL + EVM accounts.
-  const w = await createUserWallets(telegramId);
+  // First touch → provision SOL + EVM wallets via the configured custody backend.
+  const w = await provisionWallets(telegramId);
   await upsertUser({
     telegramId,
     username,
     suborgId: w.suborgId,
     solPubkey: w.solAddress,
     evmEoa: w.evmAddress,
+    solSecretEnc: w.solSecretEnc,
+    evmSecretEnc: w.evmSecretEnc,
   });
   const user = await getUser(telegramId);
   if (!user) throw new Error("Failed to persist new user.");

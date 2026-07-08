@@ -21,7 +21,7 @@ import { erc20BalanceOf, erc20Allowance } from "../chain/erc20.js";
 import { encodePermit2Approve } from "../chain/universalRouter.js";
 import { ensureGasForSell, sweepResidualGas } from "../chain/gas.js";
 import { rhPublic, rhWalletClientFor } from "../chain/rhchain.js";
-import { getEvmAccount } from "../wallets/turnkey.js";
+import { getEvmAccount } from "../wallets/custody.js";
 import { relayQuote, relayStatus, RELAY_ROUTES, RELAY_NATIVE } from "../bridge/relay.js";
 import { createOrder, updateOrder, getPosition, addToPosition } from "../db/index.js";
 import type { SellRequest, TradeResult } from "./types.js";
@@ -134,7 +134,7 @@ export async function sell(req: SellRequest): Promise<TradeResult> {
       // Recover the ETH we fronted for gas (SOL-funded users hold no ETH of their own).
       if (topup.toppedUp) {
         try {
-          await sweepResidualGas(rhWallet, wallet, account);
+          await sweepResidualGas(rhWallet, wallet, account, topup.amountWei);
         } catch (e) {
           logger.warn({ e, orderId }, "gas sweep failed (non-fatal)");
         }

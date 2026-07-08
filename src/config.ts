@@ -26,6 +26,10 @@ const schema = z.object({
   SOLANA_RPC_URL: z.string().url(),
   SOLANA_RPC_URL_PAID: z.string().url().or(z.literal("")).default(""),
 
+  // Custody backend. 'local' = per-user keys generated + encrypted at rest in the
+  // DB (needs ENCRYPTION_KEY). 'turnkey' = Turnkey TEE custody (needs the keys
+  // below). 'auto' picks turnkey when its org id is set, else local.
+  CUSTODY_PROVIDER: z.enum(["local", "turnkey", "auto"]).default("auto"),
   TURNKEY_API_BASE_URL: z.string().url().default("https://api.turnkey.com"),
   TURNKEY_ORGANIZATION_ID: z.string().default(""),
   TURNKEY_API_PUBLIC_KEY: z.string().default(""),
@@ -127,7 +131,7 @@ export function assertProductionReady(): string[] {
     if (!config.WEBHOOK_SECRET) problems.push("WEBHOOK_SECRET required for webhook mode.");
   }
   if (!config.REDIS_URL) problems.push("REDIS_URL required in prod (in-memory sessions don't survive restarts / multi-instance).");
-  if (!config.ENCRYPTION_KEY) problems.push("ENCRYPTION_KEY required in prod (encrypts 2FA secrets at rest).");
+  if (!config.ENCRYPTION_KEY) problems.push("ENCRYPTION_KEY required in prod (encrypts 2FA secrets AND local-custody wallet private keys at rest).");
   if (config.TRADING_ENABLED && !config.FEE_TREASURY_EVM) problems.push("FEE_TREASURY_EVM required once trading is enabled.");
   return problems;
 }

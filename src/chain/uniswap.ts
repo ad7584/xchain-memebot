@@ -44,14 +44,19 @@ const POOL_ABI = [
 ] as const;
 
 interface V3Pool { pool: Address; fee: number; sqrtPriceX96: bigint; token0: Address; liquidity: bigint }
+interface PoolId { pool: Address; fee: number; token0: Address }
 
-const poolCache = new Map<string, V3Pool | null>();
+// Cache ONLY immutable pool identity (address/fee/token0) per pair — never the
+// mutable price/liquidity, which must be read fresh each quote so minOut tracks
+// the live price.
+const poolIdCache = new Map<string, PoolId[]>();
 
-async function findBestPool(a: Address, b: Address): Promise<V3Pool | null> {
+async function discoverPools(a: Address, b: Address): Promise<PoolId[]> {
   const key = [a.toLowerCase(), b.toLowerCase()].sort().join(":");
-  if (poolCache.has(key)) return poolCache.get(key)!;
+  const cached = poolIdCache.get(key);
+  if (cached) return cached;
 
-  let best: V3Pool | null = null;
+  const ids: PoolId[] = [];
   for (const fee of FEE_TIERS) {
     let pool: Address;
     try {
@@ -61,21 +66,35 @@ async function findBestPool(a: Address, b: Address): Promise<V3Pool | null> {
     }
     if (!pool || pool === NATIVE) continue;
     try {
-      const [slot0, liquidity, token0] = await Promise.all([
-        rhPublic.readContract({ address: pool, abi: POOL_ABI, functionName: "slot0" }),
-        rhPublic.readContract({ address: pool, abi: POOL_ABI, functionName: "liquidity" }),
-        rhPublic.readContract({ address: pool, abi: POOL_ABI, functionName: "token0" }),
+      const token0 = (await rhPublic.readContract({ address: pool, abi: POOL_ABI, functionName: "token0" })) as Address;
+      ids.push({ pool, fee, token0 });
+    } catch {
+      continue;
+    }
+  }
+  poolIdCache.set(key, ids);
+  return ids;
+}
+
+async function findBestPool(a: Address, b: Address): Promise<V3Pool | null> {
+  const ids = await discoverPools(a, b);
+  let best: V3Pool | null = null;
+  for (const id of ids) {
+    try {
+      // Fresh reads EVERY time — pricing must not come from a cache.
+      const [slot0, liquidity] = await Promise.all([
+        rhPublic.readContract({ address: id.pool, abi: POOL_ABI, functionName: "slot0" }),
+        rhPublic.readContract({ address: id.pool, abi: POOL_ABI, functionName: "liquidity" }),
       ]);
       const liq = liquidity as bigint;
       const sqrtPriceX96 = (slot0 as readonly bigint[])[0]!;
       if (liq === 0n || sqrtPriceX96 === 0n) continue;
-      const p: V3Pool = { pool, fee, sqrtPriceX96, token0: token0 as Address, liquidity: liq };
+      const p: V3Pool = { pool: id.pool, fee: id.fee, token0: id.token0, sqrtPriceX96, liquidity: liq };
       if (!best || p.liquidity > best.liquidity) best = p;
     } catch {
       continue;
     }
   }
-  poolCache.set(key, best);
   return best;
 }
 

@@ -1,7 +1,8 @@
 /**
- * AES-256-GCM encryption for secrets at rest (currently: user 2FA secrets).
- * Key = ENCRYPTION_KEY (32-byte hex). In dev without a key we fall back to a
- * clearly-marked `plain:` prefix so nothing silently looks encrypted.
+ * AES-256-GCM encryption for secrets at rest — protects user 2FA secrets AND (in
+ * the local custody backend) per-user wallet private keys. Key = ENCRYPTION_KEY
+ * (32-byte hex). Missing key throws (never stores plaintext). `decrypt` still
+ * accepts a legacy `plain:` prefix for backward-compat, but `encrypt` never emits it.
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { config } from "../config.js";
@@ -15,7 +16,10 @@ function key(): Buffer {
 }
 
 export function encrypt(plaintext: string): string {
-  if (!config.ENCRYPTION_KEY) return `plain:${plaintext}`;
+  if (!config.ENCRYPTION_KEY) {
+    // Fail loud rather than silently persisting a raw private key / 2FA secret.
+    throw new Error("ENCRYPTION_KEY is required to encrypt secrets at rest (set a 32-byte hex key).");
+  }
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key(), iv);
   const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);

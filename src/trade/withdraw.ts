@@ -27,7 +27,7 @@ import { solana, solToLamports, solBalanceLamports } from "../chain/solana.js";
 import { rhPublic, rhWalletClientFor } from "../chain/rhchain.js";
 import { erc20BalanceOf, readTokenMeta } from "../chain/erc20.js";
 import { ensureGasForSell } from "../chain/gas.js";
-import { getEvmAccount, signSolanaTx } from "../wallets/turnkey.js";
+import { getEvmAccount, signSolanaTx } from "../wallets/custody.js";
 import { encrypt, decrypt } from "../util/crypto.js";
 import { generateSecret, otpauthUrl, verifyTotp } from "../util/totp.js";
 import {

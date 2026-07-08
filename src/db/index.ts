@@ -18,6 +18,8 @@ export interface UserRow {
   evm_eoa: string | null;
   rh_smart_account: string | null;
   twofa_secret: string | null;
+  sol_secret_enc: string | null;
+  evm_secret_enc: string | null;
   settings: Record<string, unknown>;
 }
 
@@ -32,21 +34,34 @@ export async function getUser(telegramId: number): Promise<UserRow | null> {
 export async function upsertUser(u: {
   telegramId: number;
   username?: string;
-  suborgId: string;
+  suborgId?: string;
   solPubkey: string;
   evmEoa: string;
   rhSmartAccount?: string;
+  solSecretEnc?: string;
+  evmSecretEnc?: string;
 }): Promise<void> {
   await pool.query(
-    `INSERT INTO users (telegram_id, username, turnkey_suborg_id, sol_pubkey, evm_eoa, rh_smart_account)
-     VALUES ($1,$2,$3,$4,$5,$6)
+    `INSERT INTO users (telegram_id, username, turnkey_suborg_id, sol_pubkey, evm_eoa, rh_smart_account, sol_secret_enc, evm_secret_enc)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (telegram_id) DO UPDATE SET
        username = EXCLUDED.username,
        turnkey_suborg_id = COALESCE(users.turnkey_suborg_id, EXCLUDED.turnkey_suborg_id),
        sol_pubkey = COALESCE(users.sol_pubkey, EXCLUDED.sol_pubkey),
        evm_eoa = COALESCE(users.evm_eoa, EXCLUDED.evm_eoa),
-       rh_smart_account = COALESCE(users.rh_smart_account, EXCLUDED.rh_smart_account)`,
-    [u.telegramId, u.username ?? null, u.suborgId, u.solPubkey, u.evmEoa, u.rhSmartAccount ?? null]
+       rh_smart_account = COALESCE(users.rh_smart_account, EXCLUDED.rh_smart_account),
+       sol_secret_enc = COALESCE(users.sol_secret_enc, EXCLUDED.sol_secret_enc),
+       evm_secret_enc = COALESCE(users.evm_secret_enc, EXCLUDED.evm_secret_enc)`,
+    [
+      u.telegramId,
+      u.username ?? null,
+      u.suborgId ?? null,
+      u.solPubkey,
+      u.evmEoa,
+      u.rhSmartAccount ?? null,
+      u.solSecretEnc ?? null,
+      u.evmSecretEnc ?? null,
+    ]
   );
 }
 

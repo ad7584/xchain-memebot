@@ -27,7 +27,7 @@ import { logger } from "../logger.js";
 import { getSwapCalldata } from "../chain/uniswap.js";
 import { erc20BalanceOf } from "../chain/erc20.js";
 import { relayQuote, relayStatus, RELAY_ROUTES, RELAY_NATIVE } from "../bridge/relay.js";
-import { signSolanaTx, getEvmAccount } from "../wallets/turnkey.js";
+import { signSolanaTx, getEvmAccount } from "../wallets/custody.js";
 import { rhWalletClientFor, rhPublic } from "../chain/rhchain.js";
 import { solana } from "../chain/solana.js";
 import { createOrder, updateOrder, addToPosition, type UserRow } from "../db/index.js";
@@ -165,13 +165,25 @@ async function buyFromSolana(req: BuyRequest, orderId: string): Promise<TradeRes
   await updateOrder(orderId, { status: "bridging" });
 
   const final = await pollRelay(quote.requestId);
-  if (final !== "success") {
-    await updateOrder(orderId, { status: "refunded", error: `relay status ${final}` });
+  if (final === "refund" || final === "failure") {
+    await updateOrder(orderId, { status: "refunded", error: `relay ${final}` });
     return {
       orderId,
       status: "refunded",
       txHashes: originHashes,
       message: `Bridge didn't fill (status: ${final}). Funds were refunded/settled.`,
+    };
+  }
+  if (final !== "success") {
+    // Still pending past our poll window — NOT a refund. Leave the order in
+    // 'bridging' so the recovery worker reconciles/finishes it, and tell the user.
+    return {
+      orderId,
+      status: "submitted",
+      txHashes: originHashes,
+      message:
+        "Your bridge is taking longer than usual. Your funds are safe and on the way — " +
+        "I'll finish this and notify you when it lands. Check /positions shortly.",
     };
   }
 

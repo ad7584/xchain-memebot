@@ -62,24 +62,27 @@ export async function ensureGasForSell(
 }
 
 /**
- * After a sell, sweep the user's leftover ETH (minus the sweep's own gas) back to
- * the gas tank. Only call this for SOL-funded users, who hold no ETH of their own
- * — the residual is entirely our earlier top-up. `wallet`/`account` are the user's
- * Turnkey-backed viem signer. Returns null if the dust isn't worth sweeping.
+ * After a sell, reclaim the ETH WE FRONTED for gas — never more. Sweeps back at
+ * most `toppedUpWei` (minus the sweep's own gas), so any ETH the user legitimately
+ * owns is left untouched. `wallet`/`account` are the user's signer. Returns null
+ * if there's nothing worth sweeping.
  */
 export async function sweepResidualGas(
   userEvm: Address,
   wallet: WalletClient,
-  account: Account
+  account: Account,
+  toppedUpWei: bigint
 ): Promise<`0x${string}` | null> {
   const tank = getGasTankWallet().account.address;
   const bal = await rhPublic.getBalance({ address: userEvm });
   const gasPrice = await rhPublic.getGasPrice();
   const sweepCost = 21_000n * gasPrice;
-  if (bal <= sweepCost * 2n) return null; // dust not worth a tx
-  const value = bal - sweepCost * 2n;
+  const spendable = bal > sweepCost * 2n ? bal - sweepCost * 2n : 0n;
+  // Cap at what we fronted so we can't confiscate the user's own ETH.
+  const value = spendable < toppedUpWei ? spendable : toppedUpWei;
+  if (value <= 0n) return null;
   const hash = await wallet.sendTransaction({ account, chain: null, to: tank, value });
   await rhPublic.waitForTransactionReceipt({ hash });
-  logger.info({ userEvm, value: value.toString(), hash }, "swept residual gas to tank");
+  logger.info({ userEvm, value: value.toString(), hash }, "swept fronted gas back to tank");
   return hash;
 }
