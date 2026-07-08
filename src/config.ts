@@ -40,7 +40,11 @@ const schema = z.object({
   // (Solana origin) pay to the Solana address and sells (RH origin) to the EVM one.
   FEE_TREASURY_EVM: z.string().default(""),
   FEE_TREASURY_SOL: z.string().default(""),
-  APP_FEE_BPS: z.coerce.number().int().min(0).max(2000).default(100),
+  // Relay app fee (off-chain, cross-chain legs only). Default off.
+  APP_FEE_BPS: z.coerce.number().int().min(0).max(2000).default(0),
+  // On-chain trade fee that self-funds the gas tank: skimmed from every trade and
+  // sent to the gas-tank wallet (10 = 0.1%). Default off.
+  TRADE_FEE_BPS: z.coerce.number().int().min(0).max(1000).default(0),
 
   // Uniswap Trading API (swap calldata). Confirmed reachable for chain 4663 but
   // REQUIRES an api key. Alternative: an on-chain Universal Router v4 builder.

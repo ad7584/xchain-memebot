@@ -17,6 +17,21 @@ import { logger } from "../logger.js";
 
 const HEADROOM_BPS = 2500; // fund 125% of the estimate to absorb gas spikes
 
+/** The gas-tank wallet address (also the destination for self-funding trade fees). */
+export function gasTankAddress(): Address {
+  return getGasTankWallet().account.address;
+}
+
+/** 0.1%-style trade fee is active only when configured AND a gas tank exists. */
+export function tradeFeeEnabled(): boolean {
+  return config.TRADE_FEE_BPS > 0 && !!config.GAS_TANK_PRIVATE_KEY;
+}
+
+/** Fee amount for `amount` (same units as amount), per TRADE_FEE_BPS. */
+export function tradeFee(amount: bigint): bigint {
+  return (amount * BigInt(config.TRADE_FEE_BPS)) / 10_000n;
+}
+
 export interface TopUpResult {
   toppedUp: boolean;
   amountWei: bigint;

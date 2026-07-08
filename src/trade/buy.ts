@@ -26,6 +26,7 @@ import { config } from "../config.js";
 import { logger } from "../logger.js";
 import { getSwapCalldata } from "../chain/uniswap.js";
 import { erc20BalanceOf } from "../chain/erc20.js";
+import { gasTankAddress, tradeFeeEnabled, tradeFee } from "../chain/gas.js";
 import { relayQuote, relayStatus, RELAY_ROUTES, RELAY_NATIVE } from "../bridge/relay.js";
 import { signSolanaTx, getEvmAccount } from "../wallets/custody.js";
 import { rhWalletClientFor, rhPublic } from "../chain/rhchain.js";
@@ -82,22 +83,39 @@ async function swapEthForToken(
   slippageBps: number,
   rhWallet: Address
 ): Promise<{ hash: `0x${string}`; tokenDelta: bigint }> {
+  const account = await getEvmAccount(user);
+  const wallet = rhWalletClientFor(account);
+
+  // Self-funding fee: send a slice of the input ETH to the gas tank, swap the rest.
+  let swapAmountIn = ethAmount;
+  if (tradeFeeEnabled()) {
+    const fee = tradeFee(ethAmount);
+    if (fee > 0n && fee < ethAmount) {
+      const feeHash = await wallet.sendTransaction({
+        account,
+        chain: null,
+        to: gasTankAddress(),
+        value: fee,
+      });
+      await rhPublic.waitForTransactionReceipt({ hash: feeHash });
+      swapAmountIn = ethAmount - fee;
+    }
+  }
+
   const swap = await getSwapCalldata({
     tokenIn: RELAY_NATIVE.ETH as Address,
     tokenOut: tokenAddress,
-    amountIn: ethAmount,
+    amountIn: swapAmountIn,
     slippageBps,
     recipient: rhWallet,
   });
   const balBefore = await erc20BalanceOf(tokenAddress, rhWallet);
-  const account = await getEvmAccount(user);
-  const wallet = rhWalletClientFor(account);
   const hash = await wallet.sendTransaction({
     account,
     chain: null,
     to: swap.to,
     data: swap.data,
-    value: ethAmount,
+    value: swapAmountIn,
   });
   const rcpt = await rhPublic.waitForTransactionReceipt({ hash });
   if (rcpt.status !== "success") throw new Error("destination swap tx reverted");

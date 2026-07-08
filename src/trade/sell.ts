@@ -19,7 +19,7 @@ import { ADDR } from "../chain/constants.js";
 import { getSwapCalldata } from "../chain/uniswap.js";
 import { erc20BalanceOf, erc20Allowance } from "../chain/erc20.js";
 import { encodePermit2Approve } from "../chain/universalRouter.js";
-import { ensureGasForSell, sweepResidualGas } from "../chain/gas.js";
+import { ensureGasForSell, sweepResidualGas, gasTankAddress, tradeFeeEnabled, tradeFee } from "../chain/gas.js";
 import { rhPublic, rhWalletClientFor } from "../chain/rhchain.js";
 import { getEvmAccount } from "../wallets/custody.js";
 import { relayQuote, relayStatus, RELAY_ROUTES, RELAY_NATIVE } from "../bridge/relay.js";
@@ -114,10 +114,26 @@ export async function sell(req: SellRequest): Promise<TradeResult> {
 
     if (req.fundingAsset === "SOL") {
       const usdgAfter = await erc20BalanceOf(ADDR.USDG, rhWallet);
-      const usdgReceived = usdgAfter > usdgBefore ? usdgAfter - usdgBefore : swap.minOut;
+      let usdgReceived = usdgAfter > usdgBefore ? usdgAfter - usdgBefore : swap.minOut;
       proceeds = usdgReceived;
 
-      // Bridge the ACTUAL USDG received back to the user's Solana wallet.
+      // Self-funding fee: skim 0.1% of the USDG proceeds to the gas tank (as USDG).
+      if (tradeFeeEnabled()) {
+        const feeUsdg = tradeFee(usdgReceived);
+        if (feeUsdg > 0n && feeUsdg < usdgReceived) {
+          const data = encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "transfer",
+            args: [gasTankAddress(), feeUsdg],
+          });
+          const fh = await wallet.sendTransaction({ account, chain: null, to: ADDR.USDG, data });
+          await rhPublic.waitForTransactionReceipt({ hash: fh });
+          txHashes.push(fh);
+          usdgReceived -= feeUsdg;
+        }
+      }
+
+      // Bridge the (net) USDG received back to the user's Solana wallet.
       const bridged = await bridgeUsdgToSolana(req, usdgReceived);
       txHashes.push(...bridged.hashes);
       resultStatus = bridged.status === "success" ? "filled" : "submitted";
@@ -140,6 +156,20 @@ export async function sell(req: SellRequest): Promise<TradeResult> {
         }
       }
     } else {
+      // Self-funding fee: skim 0.1% of the ETH proceeds to the gas tank.
+      if (tradeFeeEnabled()) {
+        const fee = tradeFee(swap.quotedOut);
+        if (fee > 0n) {
+          const fh = await wallet.sendTransaction({
+            account,
+            chain: null,
+            to: gasTankAddress(),
+            value: fee,
+          });
+          await rhPublic.waitForTransactionReceipt({ hash: fh });
+          txHashes.push(fh);
+        }
+      }
       await updateOrder(orderId, { status: "filled", amount_out: swap.quotedOut.toString() });
       message = "Sold → ETH in your Robinhood Chain wallet.";
     }
