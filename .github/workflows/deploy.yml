@@ -1,0 +1,29 @@
+name: Deploy to Railway
+
+# Auto-deploy on every push to main. Requires a RAILWAY_TOKEN repo secret
+# (a Railway *project* token for the xchain-memebot project). Until that secret
+# is set, the job skips gracefully (stays green).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Railway CLI
+        run: npm i -g @railway/cli
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::warning::RAILWAY_TOKEN secret not set — skipping deploy. Add it in repo Settings → Secrets and variables → Actions to enable auto-deploy."
+            exit 0
+          fi
+          railway up --service bot --ci
