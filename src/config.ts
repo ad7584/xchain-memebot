@@ -139,6 +139,13 @@ export function assertProductionReady(): string[] {
   }
   if (!config.REDIS_URL) problems.push("REDIS_URL required in prod (in-memory sessions don't survive restarts / multi-instance).");
   if (!config.ENCRYPTION_KEY) problems.push("ENCRYPTION_KEY required in prod (encrypts 2FA secrets AND local-custody wallet private keys at rest).");
-  if (config.TRADING_ENABLED && !config.FEE_TREASURY_EVM) problems.push("FEE_TREASURY_EVM required once trading is enabled.");
+  if (config.TRADING_ENABLED) {
+    // FEE_TREASURY_EVM is only needed for the Relay app fee (off by default).
+    if (config.APP_FEE_BPS > 0 && !config.FEE_TREASURY_EVM)
+      problems.push("FEE_TREASURY_EVM required when APP_FEE_BPS > 0.");
+    // The self-funding trade fee routes to the gas tank, so it needs that key.
+    if (config.TRADE_FEE_BPS > 0 && !config.GAS_TANK_PRIVATE_KEY)
+      problems.push("GAS_TANK_PRIVATE_KEY required when TRADE_FEE_BPS > 0 (fees fund the gas tank).");
+  }
   return problems;
 }
