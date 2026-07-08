@@ -9,6 +9,7 @@ import { isShuttingDown } from "../shutdown.js";
 import { processWithdrawals } from "./withdrawals.js";
 import { recoverOrders } from "./recovery.js";
 import { scanDeposits } from "./deposits.js";
+import { refillGasTank } from "./gasRefill.js";
 import type { WorkerDeps } from "./types.js";
 
 interface Job {
@@ -21,6 +22,7 @@ const JOBS: Job[] = [
   { name: "withdrawals", intervalMs: 30_000, run: processWithdrawals },
   { name: "recovery", intervalMs: 45_000, run: recoverOrders },
   { name: "deposits", intervalMs: 60_000, run: scanDeposits },
+  { name: "gasRefill", intervalMs: 120_000, run: () => refillGasTank() },
 ];
 
 export function startWorkers(deps: WorkerDeps): { stop: () => void } {
