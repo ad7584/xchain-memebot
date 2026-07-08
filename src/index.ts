@@ -60,6 +60,7 @@ async function main() {
   if (!config.TRADING_ENABLED) {
     logger.warn("TRADING_ENABLED=false — quotes/onboarding work, trades will NOT broadcast.");
   }
+  logger.info(`config: trading=${config.TRADING_ENABLED} tradeFee=${config.TRADE_FEE_BPS}bps appFee=${config.APP_FEE_BPS}bps`);
 
   if (config.BOT_MODE === "webhook") {
     requireConfig("webhook", ["WEBHOOK_DOMAIN", "WEBHOOK_SECRET"]);
